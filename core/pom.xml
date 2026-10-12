@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>io.quarkiverse.networkcapture</groupId>
+        <artifactId>quarkus-network-capture-parent</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>network-capture-core</artifactId>
+    <name>Quarkus - Network Capture - Core</name>
+    <description>Packet capture to pcapng using only the JDK (FFM), for Linux and macOS</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.smallrye.common</groupId>
+            <artifactId>smallrye-common-os</artifactId>
+            <version>${smallrye-common.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.smallrye.common</groupId>
+            <artifactId>smallrye-common-process</artifactId>
+            <version>${smallrye-common.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jboss.logging</groupId>
+            <artifactId>jboss-logging</artifactId>
+            <version>${jboss-logging.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.smallrye.ffm</groupId>
+            <artifactId>smallrye-ffm</artifactId>
+            <version>${smallrye-ffm.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <!-- Rewrites the @Link native methods of Libc into lazily linked FFM downcalls -->
+                <groupId>io.smallrye.ffm</groupId>
+                <artifactId>smallrye-ffm-maven-plugin</artifactId>
+                <version>${smallrye-ffm.version}</version>
+                <executions>
+                    <execution>
+                        <id>ffm</id>
+                        <goals>
+                            <goal>transform</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <artifactId>maven-surefire-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

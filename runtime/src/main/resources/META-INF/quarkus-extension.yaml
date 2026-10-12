@@ -1,0 +1,15 @@
+---
+artifact: ${project.groupId}:${project.artifactId}:${project.version}
+name: "Network Capture"
+description: "Capture network traffic of your application to pcapng files you can open in Wireshark, from the Dev UI"
+metadata:
+  keywords:
+  - "network-capture"
+  - "pcap"
+  - "wireshark"
+  - "network"
+  categories:
+  - "miscellaneous"
+  status: "experimental"
+  config:
+  - "quarkus.network-capture."
