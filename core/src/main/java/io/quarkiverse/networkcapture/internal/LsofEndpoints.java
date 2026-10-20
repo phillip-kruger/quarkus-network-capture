@@ -23,7 +23,7 @@ public final class LsofEndpoints implements ProcessEndpoints {
     }
 
     @Override
-    public void scan(Set<Integer> tcpPorts, Set<Integer> udpPorts) {
+    public void scan(Set<Endpoint> tcp, Set<Endpoint> udp) {
         String output;
         try {
             Process process = new ProcessBuilder("lsof", "-nP", "-a", "-p", Long.toString(pid), "-i", "-F", "Pn")
@@ -41,14 +41,15 @@ public final class LsofEndpoints implements ProcessEndpoints {
             Thread.currentThread().interrupt();
             throw new CaptureException("Interrupted while running lsof", e);
         }
-        parse(output, tcpPorts, udpPorts);
+        parse(output, tcp, udp);
     }
 
     /**
      * Parses {@code lsof -F Pn} output: one field per line, {@code P} is the protocol and {@code n} the name,
-     * e.g. {@code *:8080}, {@code 127.0.0.1:5432->127.0.0.1:50000} or {@code [::1]:8080}.
+     * e.g. {@code *:8080}, {@code 127.0.0.1:5432->127.0.0.1:50000} or {@code [::1]:8080}. Only the local side of
+     * a connection, the part before the arrow, is an endpoint of this process.
      */
-    static void parse(String output, Set<Integer> tcpPorts, Set<Integer> udpPorts) {
+    static void parse(String output, Set<Endpoint> tcp, Set<Endpoint> udp) {
         String protocol = null;
         for (String line : output.split("\n")) {
             if (line.startsWith("P")) {
@@ -70,9 +71,9 @@ public final class LsofEndpoints implements ProcessEndpoints {
                     continue;
                 }
                 if (protocol.equals("TCP")) {
-                    tcpPorts.add(port);
+                    tcp.add(Endpoint.of(local.substring(0, colon), port));
                 } else if (protocol.equals("UDP")) {
-                    udpPorts.add(port);
+                    udp.add(Endpoint.of(local.substring(0, colon), port));
                 }
             }
         }

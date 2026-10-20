@@ -2,6 +2,8 @@ package io.quarkiverse.networkcapture.internal;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashSet;
@@ -25,7 +27,7 @@ public final class ProcSelfEndpoints implements ProcessEndpoints {
     private static final List<Path> UDP_TABLES = List.of(Path.of("/proc/net/udp"), Path.of("/proc/net/udp6"));
 
     @Override
-    public void scan(Set<Integer> tcpPorts, Set<Integer> udpPorts) {
+    public void scan(Set<Endpoint> tcp, Set<Endpoint> udp) {
         Set<String> inodes = new HashSet<>();
         try (Stream<Path> fds = Files.list(FD_DIR)) {
             for (Path fd : fds.toList()) {
@@ -41,11 +43,11 @@ public final class ProcSelfEndpoints implements ProcessEndpoints {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        collect(TCP_TABLES, inodes, tcpPorts);
-        collect(UDP_TABLES, inodes, udpPorts);
+        collect(TCP_TABLES, inodes, tcp);
+        collect(UDP_TABLES, inodes, udp);
     }
 
-    private static void collect(List<Path> tables, Set<String> inodes, Set<Integer> ports) {
+    private static void collect(List<Path> tables, Set<String> inodes, Set<Endpoint> endpoints) {
         for (Path table : tables) {
             if (!Files.isReadable(table)) {
                 continue;
@@ -58,11 +60,37 @@ public final class ProcSelfEndpoints implements ProcessEndpoints {
                         continue;
                     }
                     String local = f[1];
-                    ports.add(Integer.parseInt(local.substring(local.lastIndexOf(':') + 1), 16));
+                    int colon = local.lastIndexOf(':');
+                    endpoints.add(new Endpoint(address(local.substring(0, colon)),
+                            Integer.parseInt(local.substring(colon + 1), 16)));
                 }
             } catch (IOException e) {
                 throw new UncheckedIOException(e);
             }
+        }
+    }
+
+    /**
+     * The address of a {@code local_address} column: 8 hex digits for IPv4, 32 for IPv6, holding the 32 bit words
+     * of the address in the host's byte order, which on the platforms this runs on is little-endian. Returns null
+     * for a wildcard bind or for a column that is not an address.
+     */
+    static String address(String hex) {
+        if (hex.isEmpty() || hex.length() % 8 != 0) {
+            return null;
+        }
+        byte[] bytes = new byte[hex.length() / 2];
+        try {
+            for (int word = 0; word < bytes.length / 4; word++) {
+                for (int b = 0; b < 4; b++) {
+                    // the last byte of the word in the text is the first of the address
+                    int at = word * 8 + (3 - b) * 2;
+                    bytes[word * 4 + b] = (byte) Integer.parseInt(hex.substring(at, at + 2), 16);
+                }
+            }
+            return Endpoint.canonical(InetAddress.getByAddress(bytes));
+        } catch (NumberFormatException | UnknownHostException e) {
+            return null;
         }
     }
 }
