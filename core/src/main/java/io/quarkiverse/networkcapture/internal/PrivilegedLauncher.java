@@ -69,14 +69,8 @@ public final class PrivilegedLauncher {
     public static Capture.Result open(List<CaptureInterface> interfaces, CaptureOptions options) {
         Elevation elevation = options.elevation().orElseThrow();
         Duration timeout = options.helperTimeout();
-        Path dir;
-        try {
-            dir = Files.createTempDirectory("quarkus-network-capture-",
-                    PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------")));
-        } catch (IOException e) {
-            throw new CaptureException("Unable to create temporary directory", e);
-        }
-        Path socketPath = dir.resolve("helper.sock");
+        Path socketPath = createSocketPath(Path.of(System.getProperty("java.io.tmpdir")));
+        Path dir = socketPath.getParent();
         int socket = UnixSockets.bind(socketPath);
         Outcome outcome = new Outcome();
         Map<String, CaptureInterface> byName = new LinkedHashMap<>();
@@ -172,6 +166,19 @@ public final class PrivilegedLauncher {
                     parts.length > 2 ? String.join(" ", Arrays.copyOfRange(parts, 2, parts.length)) : "unknown error");
             case "DONE" -> outcome.done = true;
             default -> throw new CaptureException("Unexpected helper message: " + String.join(" ", parts));
+        }
+    }
+
+    // Creates a private directory under parent and returns the path of the socket to bind inside it. The names are
+    // kept short because sockaddr_un holds at most 103 bytes of path on macOS, where the per-user temporary
+    // directory alone is about 50.
+    static Path createSocketPath(Path parent) {
+        try {
+            return Files.createTempDirectory(parent, "qnc-",
+                    PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------")))
+                    .resolve("helper.sock");
+        } catch (IOException e) {
+            throw new CaptureException("Unable to create temporary directory", e);
         }
     }
 
