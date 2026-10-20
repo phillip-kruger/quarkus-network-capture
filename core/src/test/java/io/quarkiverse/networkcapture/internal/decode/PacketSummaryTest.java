@@ -1,10 +1,12 @@
 package io.quarkiverse.networkcapture.internal.decode;
 
+import static io.quarkiverse.networkcapture.TestPackets.clientHello;
 import static io.quarkiverse.networkcapture.TestPackets.concat;
 import static io.quarkiverse.networkcapture.TestPackets.ethernet;
 import static io.quarkiverse.networkcapture.TestPackets.ipv4;
 import static io.quarkiverse.networkcapture.TestPackets.ipv6;
 import static io.quarkiverse.networkcapture.TestPackets.tcp;
+import static io.quarkiverse.networkcapture.TestPackets.tlsRecord;
 import static io.quarkiverse.networkcapture.TestPackets.udp;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -53,7 +55,51 @@ class PacketSummaryTest {
         byte[] binary = { 0x16, 0x03, 0x01, 0x00, (byte) 0xC8, 0x01, 0x00, 0x00, (byte) 0xC4, 0x03, 0x03, 0x00, 0x00 };
         PacketSummary tls = PacketSummary.decode(LinkType.ETHERNET, concat(ethernet(0x0800),
                 ipv4(6, lo, lo, 20 + binary.length), tcp(50000, 443, 0x18), binary));
-        assertEquals("TCP", tls.protocol());
+        assertEquals("HTTPS", tls.protocol()); // truncated hello without ALPN, port 443 decides
+        assertEquals("Client Hello", tls.info());
+    }
+
+    @Test
+    void tls() {
+        byte[] lo = { 127, 0, 0, 1 };
+        byte[] hello = clientHello("localhost", "h2", "http/1.1");
+        PacketSummary h = PacketSummary.decode(LinkType.ETHERNET, concat(ethernet(0x0800),
+                ipv4(6, lo, lo, 20 + hello.length), tcp(50000, 8443, 0x18), hello));
+        assertEquals("HTTPS", h.protocol());
+        assertEquals("Client Hello (SNI=localhost, ALPN=h2, http/1.1)", h.info());
+        assertEquals("localhost", h.tls().serverName());
+
+        // no ALPN: the port decides
+        byte[] pg = clientHello("db.internal");
+        PacketSummary db = PacketSummary.decode(LinkType.ETHERNET, concat(ethernet(0x0800),
+                ipv4(6, lo, lo, 20 + pg.length), tcp(50000, 5432, 0x18), pg));
+        assertEquals("TLS", db.protocol());
+        assertEquals("Client Hello (SNI=db.internal)", db.info());
+        PacketSummary web = PacketSummary.decode(LinkType.ETHERNET, concat(ethernet(0x0800),
+                ipv4(6, lo, lo, 20 + pg.length), tcp(50000, 443, 0x18), pg));
+        assertEquals("HTTPS", web.protocol());
+
+        // ALPN that is not HTTP
+        byte[] mq = clientHello(null, "mqtt");
+        PacketSummary m = PacketSummary.decode(LinkType.ETHERNET, concat(ethernet(0x0800),
+                ipv4(6, lo, lo, 20 + mq.length), tcp(50000, 8443, 0x18), mq));
+        assertEquals("TLS", m.protocol());
+        assertEquals("Client Hello (ALPN=mqtt)", m.info());
+
+        // several records in one segment, the last one cut by the segment
+        byte[] serverHello = { 2, 0, 0, 4, 3, 3, 0, 0 };
+        byte[] reply = concat(tlsRecord(0x16, serverHello), tlsRecord(0x14, new byte[] { 1 }),
+                new byte[] { 0x17, 3, 3, 0x10, 0, 1, 2, 3 });
+        PacketSummary r = PacketSummary.decode(LinkType.ETHERNET, concat(ethernet(0x0800),
+                ipv4(6, lo, lo, 20 + reply.length), tcp(8443, 50000, 0x18), reply));
+        assertEquals("HTTPS", r.protocol());
+        assertEquals("Server Hello, Change Cipher Spec, Application Data", r.info());
+
+        // a valid record header followed by something that is not a record is not TLS
+        byte[] fake = concat(tlsRecord(0x17, new byte[] { 1 }), new byte[] { 0x42, 0x42, 0x42, 0x42, 0x42 });
+        PacketSummary f = PacketSummary.decode(LinkType.ETHERNET, concat(ethernet(0x0800),
+                ipv4(6, lo, lo, 20 + fake.length), tcp(8443, 50000, 0x18), fake));
+        assertEquals("TCP", f.protocol());
     }
 
     @Test

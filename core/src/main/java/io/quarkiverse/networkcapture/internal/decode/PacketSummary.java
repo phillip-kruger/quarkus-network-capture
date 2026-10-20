@@ -13,7 +13,9 @@ import io.quarkiverse.networkcapture.LinkType;
  * <a href="https://www.rfc-editor.org/rfc/rfc792">RFC 792</a> (ICMP);
  * <a href="https://www.rfc-editor.org/rfc/rfc4443">RFC 4443</a> (ICMPv6);
  * {@link HttpMessage} for HTTP/1.x and {@link Http2Frames} for HTTP/2, both recognised at the start of a TCP
- * segment's payload. Encrypted traffic is shown as plain TCP.
+ * segment's payload; {@link TlsRecords} for TLS, whose records are shown but whose content cannot be. TLS is
+ * reported as {@code HTTPS} when the Client Hello offers HTTP through ALPN, or offers nothing and the connection
+ * uses a well known HTTPS port, and as {@code TLS} otherwise.
  *
  * @param source source address, with port for TCP and UDP
  * @param destination destination address, with port for TCP and UDP
@@ -24,17 +26,24 @@ import io.quarkiverse.networkcapture.LinkType;
  * @param http the parsed HTTP/1.x message when the packet starts one, otherwise null
  * @param httpBody a later part of an HTTP/1.x body, only produced by {@link HttpStreamDecoder}, otherwise null
  * @param exchange the request/response pairing, only produced by {@link HttpStreamDecoder}, otherwise null
+ * @param tls the parsed Client Hello when the packet starts one, otherwise null
  */
 public record PacketSummary(String source, String destination, String protocol, String info, int sourcePort,
-        int destinationPort, HttpMessage http, HttpBodyPart httpBody, HttpExchange exchange) {
+        int destinationPort, HttpMessage http, HttpBodyPart httpBody, HttpExchange exchange, TlsRecords.Hello tls) {
 
     public PacketSummary(String source, String destination, String protocol, String info, int sourcePort,
             int destinationPort) {
-        this(source, destination, protocol, info, sourcePort, destinationPort, null, null, null);
+        this(source, destination, protocol, info, sourcePort, destinationPort, null, null, null, null);
     }
 
     PacketSummary withExchange(HttpExchange exchange) {
-        return new PacketSummary(source, destination, protocol, info, sourcePort, destinationPort, http, httpBody, exchange);
+        return new PacketSummary(source, destination, protocol, info, sourcePort, destinationPort, http, httpBody, exchange,
+                null);
+    }
+
+    // Whether a TLS connection on these ports should be assumed to carry HTTP when its Client Hello does not say
+    public static boolean httpsPort(int sourcePort, int destinationPort) {
+        return sourcePort == 443 || sourcePort == 8443 || destinationPort == 443 || destinationPort == 8443;
     }
 
     public static PacketSummary decode(LinkType linkType, byte[] data) {
@@ -94,11 +103,32 @@ public record PacketSummary(String source, String destination, String protocol, 
         if (startLine != null) {
             // the message is null when the header section does not fit in this segment
             return new PacketSummary(source, destination, "HTTP", startLine, s.sourcePort(), s.destinationPort(),
-                    HttpMessage.parse(d, s.payloadOffset(), s.payloadLength()), null, null);
+                    HttpMessage.parse(d, s.payloadOffset(), s.payloadLength()), null, null, null);
         }
         String http2 = Http2Frames.describe(d, s.payloadOffset(), s.payloadLength());
         if (http2 != null) {
             return new PacketSummary(source, destination, "HTTP2", http2, s.sourcePort(), s.destinationPort());
+        }
+        TlsRecords.Summary tls = TlsRecords.describe(d, s.payloadOffset(), s.payloadLength());
+        if (tls != null) {
+            TlsRecords.Hello hello = tls.hello();
+            boolean https = hello != null && !hello.protocols().isEmpty() ? hello.http()
+                    : httpsPort(s.sourcePort(), s.destinationPort());
+            String info = tls.info();
+            if (hello != null) {
+                List<String> details = new ArrayList<>();
+                if (hello.serverName() != null) {
+                    details.add("SNI=" + hello.serverName());
+                }
+                if (!hello.protocols().isEmpty()) {
+                    details.add("ALPN=" + String.join(", ", hello.protocols()));
+                }
+                if (!details.isEmpty()) {
+                    info += " (" + String.join(", ", details) + ")";
+                }
+            }
+            return new PacketSummary(source, destination, https ? "HTTPS" : "TLS", info, s.sourcePort(), s.destinationPort(),
+                    null, null, null, hello);
         }
         List<String> names = new ArrayList<>();
         if ((s.flags() & TransportSegment.SYN) != 0) names.add("SYN");

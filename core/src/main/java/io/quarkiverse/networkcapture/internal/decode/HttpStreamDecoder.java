@@ -15,6 +15,10 @@ import io.quarkiverse.networkcapture.LinkType;
  * when the body ends, when the connection closes, or when too many connections are tracked. Not thread safe; use one
  * instance per consumer.
  * <p>
+ * TLS connections are remembered from their Client Hello, so that the segments that follow, which cannot be
+ * recognised on their own because they are encrypted or start in the middle of a record, are reported as the same
+ * protocol with the server name the client asked for.
+ * <p>
  * Requests and responses are also paired into {@link HttpExchange}s: a response, and the body parts that follow it,
  * refer to the oldest request on the connection that is still unanswered.
  * <p>
@@ -48,6 +52,11 @@ public final class HttpStreamDecoder {
         }
     }
 
+    // The three maps below are bounded LRU caches: with accessOrder (the third constructor argument, the first two
+    // being HashMap's defaults) a LinkedHashMap moves an entry to the tail on every get or put, and removeEldestEntry
+    // is consulted after each insertion, so once there are more than MAX_CONNECTIONS entries the one that has not
+    // seen a packet for the longest is dropped. Insertion order would instead forget long lived connections, such as
+    // a pool member or an SSE stream, that are still busy. A dropped entry only means the segment shows as plain TCP.
     private final Map<String, Body> bodies = new LinkedHashMap<>(16, 0.75f, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<String, Body> eldest) {
@@ -64,9 +73,19 @@ public final class HttpStreamDecoder {
     };
     private long nextExchange = 1;
 
+    // The protocol and server name of each TLS connection, from its Client Hello.
+    private final Map<String, String[]> tls = new LinkedHashMap<>(16, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, String[]> eldest) {
+            return size() > MAX_CONNECTIONS;
+        }
+    };
+
     public PacketSummary decode(LinkType linkType, byte[] data) {
         PacketSummary summary = PacketSummary.decode(linkType, data);
-        if (!summary.protocol().equals("TCP") && !summary.protocol().equals("HTTP")) {
+        boolean tcp = summary.protocol().equals("TCP");
+        boolean encrypted = summary.protocol().equals("TLS") || summary.protocol().equals("HTTPS");
+        if (!tcp && !encrypted && !summary.protocol().equals("HTTP")) {
             return summary;
         }
         TransportSegment segment = TransportSegment.of(linkType, data);
@@ -77,6 +96,23 @@ public final class HttpStreamDecoder {
         String connection = summary.source().compareTo(summary.destination()) < 0
                 ? summary.source() + "|" + summary.destination()
                 : summary.destination() + "|" + summary.source();
+        if (summary.tls() != null) {
+            tls.put(connection, new String[] { summary.protocol(), summary.tls().serverName() });
+        }
+        String[] known = tls.get(connection);
+        if (known != null && segment.payloadLength() > 0) {
+            String info = encrypted && summary.tls() == null ? summary.info() : tcp ? "Continuation Data" : null;
+            if (info != null) {
+                summary = new PacketSummary(summary.source(), summary.destination(), known[0],
+                        info + (known[1] == null ? "" : " (" + known[1] + ")"), summary.sourcePort(), summary.destinationPort());
+            }
+        }
+        if (encrypted || known != null) {
+            if (segment.closes()) {
+                tls.remove(connection);
+            }
+            return summary;
+        }
         if (summary.http() != null) {
             HttpExchange exchange = pair(connection, summary.http());
             Body body = remember(key, summary.http());
@@ -100,7 +136,7 @@ public final class HttpStreamDecoder {
                         + (part.chunked() ? "" : " [" + (part.offset() + 1) + "-" + (part.offset() + part.data().length) + " of " + part.total() + "]")
                         + ": " + (text == null ? part.data().length + " bytes" : text.replace("\r", "\\r").replace("\n", "\\n"));
                 result = new PacketSummary(summary.source(), summary.destination(), "HTTP", info, summary.sourcePort(),
-                        summary.destinationPort(), null, part, body.exchange);
+                        summary.destinationPort(), null, part, body.exchange, null);
             }
             if (body.finished) {
                 bodies.remove(key);

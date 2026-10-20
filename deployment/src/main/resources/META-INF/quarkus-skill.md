@@ -33,5 +33,7 @@
 
 - Do NOT look for packets of a request made in the last second right away: packets are held briefly so the
   application-only filter can learn about new sockets; `packets` returns them a moment later.
-- Do NOT expect HTTP/2 or TLS bodies to be decoded; HTTP/2 shows frame types, TLS shows only the records.
+- Do NOT expect HTTP/2 or TLS bodies to be decoded; HTTP/2 shows frame types, TLS shows only the record types plus
+  the server name and ALPN from the Client Hello. `HTTPS` means TLS whose Client Hello offered HTTP, or TLS on port
+  443 or 8443 without ALPN; other TLS shows as `TLS`.
 - Do NOT run the application itself as root to avoid the prompt; grant the capability to the JDK instead.
