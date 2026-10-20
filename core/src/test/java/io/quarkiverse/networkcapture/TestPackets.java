@@ -1,7 +1,7 @@
 package io.quarkiverse.networkcapture;
 
 import java.io.ByteArrayOutputStream;
-
+import java.nio.charset.StandardCharsets;
 
 // Builders for synthetic packets.
 public final class TestPackets {
@@ -73,6 +73,63 @@ public final class TestPackets {
                 .linkType(LinkType.ETHERNET)
                 .packet(Packet.builder().timestampNanos(0).data(data).build())
                 .build();
+    }
+
+    /**
+     * A TLS 1.2 record carrying a ClientHello with the given server name (null for none) and ALPN protocols (none
+     * for no ALPN extension); only the fields the decoder reads are meaningful.
+     */
+    public static byte[] clientHello(String serverName, String... alpn) {
+        ByteArrayOutputStream ext = new ByteArrayOutputStream();
+        if (serverName != null) {
+            byte[] name = serverName.getBytes(StandardCharsets.US_ASCII);
+            ext.writeBytes(new byte[] { 0, 0 }); // server_name
+            u16(ext, name.length + 5);
+            u16(ext, name.length + 3);
+            ext.write(0); // host_name
+            u16(ext, name.length);
+            ext.writeBytes(name);
+        }
+        if (alpn.length > 0) {
+            ByteArrayOutputStream list = new ByteArrayOutputStream();
+            for (String protocol : alpn) {
+                byte[] b = protocol.getBytes(StandardCharsets.US_ASCII);
+                list.write(b.length);
+                list.writeBytes(b);
+            }
+            ext.writeBytes(new byte[] { 0, 16 }); // application_layer_protocol_negotiation
+            u16(ext, list.size() + 2);
+            u16(ext, list.size());
+            ext.writeBytes(list.toByteArray());
+        }
+        ByteArrayOutputStream body = new ByteArrayOutputStream();
+        body.writeBytes(new byte[] { 3, 3 }); // client_version
+        body.writeBytes(new byte[32]); // random
+        body.write(0); // session id length
+        body.writeBytes(new byte[] { 0, 2, 0x13, 0x01 }); // one cipher suite
+        body.writeBytes(new byte[] { 1, 0 }); // one compression method
+        u16(body, ext.size());
+        body.writeBytes(ext.toByteArray());
+        ByteArrayOutputStream hello = new ByteArrayOutputStream();
+        hello.write(1); // client_hello
+        hello.write(0);
+        u16(hello, body.size());
+        hello.writeBytes(body.toByteArray());
+        return tlsRecord(0x16, hello.toByteArray());
+    }
+
+    public static byte[] tlsRecord(int contentType, byte[] body) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        out.write(contentType);
+        out.writeBytes(new byte[] { 3, 3 });
+        u16(out, body.length);
+        out.writeBytes(body);
+        return out.toByteArray();
+    }
+
+    private static void u16(ByteArrayOutputStream out, int v) {
+        out.write(v >> 8);
+        out.write(v);
     }
 
     public static byte[] concat(byte[]... parts) {

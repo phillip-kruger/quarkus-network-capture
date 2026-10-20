@@ -1,9 +1,11 @@
 package io.quarkiverse.networkcapture.internal.decode;
 
+import static io.quarkiverse.networkcapture.TestPackets.clientHello;
 import static io.quarkiverse.networkcapture.TestPackets.concat;
 import static io.quarkiverse.networkcapture.TestPackets.ethernet;
 import static io.quarkiverse.networkcapture.TestPackets.ipv4;
 import static io.quarkiverse.networkcapture.TestPackets.tcp;
+import static io.quarkiverse.networkcapture.TestPackets.tlsRecord;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -35,6 +37,41 @@ class HttpStreamDecoderTest {
         byte[] p = payload.getBytes(StandardCharsets.UTF_8);
         return decoder.decode(LinkType.ETHERNET, concat(ethernet(0x0800), ipv4(6, CLIENT, SERVER, 20 + p.length),
                 tcp(50000, 8080, 0x18), p));
+    }
+
+    private PacketSummary tls(byte[] src, int sport, byte[] dst, int dport, byte[] payload, int flags) {
+        return decoder.decode(LinkType.ETHERNET, concat(ethernet(0x0800), ipv4(6, src, dst, 20 + payload.length),
+                tcp(sport, dport, flags), payload));
+    }
+
+    @Test
+    void tlsConnection() {
+        PacketSummary hello = tls(CLIENT, 50000, SERVER, 8443, clientHello("localhost", "h2"), 0x18);
+        assertEquals("HTTPS", hello.protocol());
+        assertEquals("Client Hello (SNI=localhost, ALPN=h2)", hello.info());
+
+        PacketSummary reply = tls(SERVER, 8443, CLIENT, 50000, tlsRecord(0x16, new byte[] { 2, 0, 0, 4, 3, 3, 0, 0 }), 0x18);
+        assertEquals("HTTPS", reply.protocol());
+        assertEquals("Server Hello (localhost)", reply.info());
+
+        // a segment starting in the middle of a record
+        PacketSummary middle = tls(SERVER, 8443, CLIENT, 50000, new byte[] { 0x42, 0x42, 0x42 }, 0x18);
+        assertEquals("HTTPS", middle.protocol());
+        assertEquals("Continuation Data (localhost)", middle.info());
+
+        // an empty segment stays TCP
+        PacketSummary ack = tls(CLIENT, 50000, SERVER, 8443, new byte[0], 0x10);
+        assertEquals("TCP", ack.protocol());
+
+        // another connection is unaffected
+        PacketSummary other = tls(CLIENT, 50001, SERVER, 8443, new byte[] { 0x42, 0x42, 0x42 }, 0x18);
+        assertEquals("TCP", other.protocol());
+
+        PacketSummary fin = tls(CLIENT, 50000, SERVER, 8443, tlsRecord(0x15, new byte[] { 1, 0 }), 0x11);
+        assertEquals("HTTPS", fin.protocol());
+        assertEquals("Alert (localhost)", fin.info());
+        PacketSummary after = tls(CLIENT, 50000, SERVER, 8443, new byte[] { 0x42, 0x42, 0x42 }, 0x18);
+        assertEquals("TCP", after.protocol());
     }
 
     @Test

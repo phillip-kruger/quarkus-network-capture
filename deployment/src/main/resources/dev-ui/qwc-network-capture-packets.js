@@ -123,7 +123,7 @@ export class QwcNetworkCapturePackets extends LitElement {
     }
 
     _visible() {
-        return this._onlyHttp ? this.packets.filter(p => p.protocol === 'HTTP' || p.protocol === 'HTTP2') : this.packets;
+        return this._onlyHttp ? this.packets.filter(p => p.protocol === 'HTTP' || p.protocol === 'HTTP2' || p.protocol === 'HTTPS') : this.packets;
     }
 
     _scrollTo(index) {
@@ -238,6 +238,8 @@ export class QwcNetworkCapturePackets extends LitElement {
                     ${h.bodyBytes === 0 ? '' : this._renderBody(h)}
                 ` : html`<span class="muted">${p.info}${p.protocol === 'HTTP2'
                     ? html`<br>HTTP/2 headers are compressed on the wire, so only frame types can be shown.`
+                    : p.protocol === 'HTTPS' || p.protocol === 'TLS'
+                    ? html`<br>TLS traffic is encrypted, so only the record types and the server name from the Client Hello can be shown.`
                     : html`<br>Headers and body are shown for HTTP/1.x messages.`}</span>`}
             </div>
         `;
