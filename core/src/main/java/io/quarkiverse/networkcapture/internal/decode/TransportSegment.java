@@ -11,6 +11,8 @@ import io.quarkiverse.networkcapture.LinkType;
  * bytes in both; see {@link IpPacket} for the network layer.
  *
  * @param tcp whether this is TCP, as opposed to UDP
+ * @param source textual source address, from the network layer
+ * @param destination textual destination address, from the network layer
  * @param sourcePort source port
  * @param destinationPort destination port
  * @param flags the TCP control bits, {@code FIN} being bit 0 and {@code RST} bit 2; 0 for UDP
@@ -18,8 +20,8 @@ import io.quarkiverse.networkcapture.LinkType;
  * @param payloadOffset index of the first payload byte in the captured data
  * @param payloadLength number of payload bytes present in the captured data
  */
-public record TransportSegment(boolean tcp, int sourcePort, int destinationPort, int flags, long sequence, int payloadOffset,
-        int payloadLength) {
+public record TransportSegment(boolean tcp, String source, String destination, int sourcePort, int destinationPort, int flags,
+        long sequence, int payloadOffset, int payloadLength) {
 
     static final int FIN = 0x01;
     static final int SYN = 0x02;
@@ -47,12 +49,12 @@ public record TransportSegment(boolean tcp, int sourcePort, int destinationPort,
                 int flags = d[o + 13] & 0xFF;
                 long sequence = Integer.toUnsignedLong(NetworkLayer.u16(d, o + 4) << 16 | NetworkLayer.u16(d, o + 6));
                 int payload = o + dataOffset;
-                return new TransportSegment(true, sourcePort, destinationPort, flags, sequence, payload,
-                        Math.max(0, Math.min(ip.payloadEnd(), d.length) - payload));
+                return new TransportSegment(true, ip.source(), ip.destination(), sourcePort, destinationPort, flags,
+                        sequence, payload, Math.max(0, Math.min(ip.payloadEnd(), d.length) - payload));
             }
             if (ip.protocol() == IpPacket.UDP) {
                 int length = NetworkLayer.u16(d, o + 4);
-                return new TransportSegment(false, sourcePort, destinationPort, 0, 0, o + 8,
+                return new TransportSegment(false, ip.source(), ip.destination(), sourcePort, destinationPort, 0, 0, o + 8,
                         Math.max(0, Math.min(o + length, d.length) - (o + 8)));
             }
             return null;
