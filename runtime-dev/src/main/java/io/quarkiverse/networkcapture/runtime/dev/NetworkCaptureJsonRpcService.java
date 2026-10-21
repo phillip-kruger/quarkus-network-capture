@@ -39,17 +39,30 @@ public class NetworkCaptureJsonRpcService {
                 setupHint(), config.applicationOnly(), config.excludeDevUi());
     }
 
-    /**
-     * @param elevate whether to fall back to the privileged helper when the direct open is refused
-     */
     @DevMCPEnableByDefault
     @JsonRpcDescription("Start capturing the application's network traffic on all interfaces that are up, to a new pcapng file. "
-            + "Returns status 'started', 'permission-required' when the process lacks capture privileges (the message says "
-            + "how to grant them), or 'error'. Then exercise the application and read the packets with 'packets'")
+            + "Returns status 'started', 'permission-required' when the process lacks capture privileges, or 'error'. "
+            + "This tool never runs the privileged helper: on 'permission-required', ask the user to press Start capture "
+            + "on the Network Capture page of the Dev UI, or to run the one-time command in 'setupHint', then call it again. "
+            + "Once started, exercise the application and read the packets with 'packets'")
     public Messages.StartResult start(
-            @JsonRpcDescription("Whether to run a privileged helper (which may prompt the user for a password) when the direct open is refused") boolean elevate,
             @JsonRpcDescription("Keep only packets to or from this application's sockets") boolean applicationOnly,
             @JsonRpcDescription("Leave the Dev UI's and Dev MCP's own traffic (their websocket and HTTP exchanges) out of the capture") boolean excludeDevUi) {
+        return doStart(false, applicationOnly, excludeDevUi);
+    }
+
+    /**
+     * The Dev UI page's start. It has no description, so it is not a Dev MCP tool: running the privileged helper,
+     * which runs as root and may not even prompt when sudo has cached credentials or a NOPASSWD rule, must be the
+     * user's decision, taken by pressing the button on the page.
+     *
+     * @param elevate whether to fall back to the privileged helper when the direct open is refused
+     */
+    public Messages.StartResult startFromDevUi(boolean elevate, boolean applicationOnly, boolean excludeDevUi) {
+        return doStart(elevate, applicationOnly, excludeDevUi);
+    }
+
+    private Messages.StartResult doStart(boolean elevate, boolean applicationOnly, boolean excludeDevUi) {
         CaptureOptions options = CaptureOptions.builder().snapLen(config.snapLen()).promiscuous(config.promiscuous())
                 .elevation(elevate ? elevation() : null).helperTimeout(config.helperTimeout()).build();
         try {
