@@ -47,12 +47,30 @@ public class NetworkCaptureDevMcpTest {
     }
 
     @Test
+    void agentCannotRunThePrivilegedHelper() throws Exception {
+        String tools = call("{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/list\"}");
+        assertFalse(tools.contains("startFromDevUi"), "the page's start must not be a tool: " + tools);
+        assertFalse(tools.contains("\"elevate\""), "no tool may take an elevate argument: " + tools);
+    }
+
+    @Test
     void statusToolCanBeCalled() throws Exception {
         String status = call("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\","
                 + "\"params\":{\"name\":\"quarkus-network-capture_status\",\"arguments\":{}}}");
         // MCP returns the tool's result as JSON text inside a content block
         assertTrue(status.contains("\\\"running\\\" : false"), status);
         assertTrue(status.contains("\"isError\" : false"), status);
+    }
+
+    @Test
+    void startToolNeverPrompts() throws Exception {
+        // Without the capture privilege the tool must report it rather than run the helper, which would prompt or,
+        // with cached sudo credentials, run as root unasked; with the privilege it simply starts.
+        String result = call("{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{"
+                + "\"name\":\"quarkus-network-capture_start\",\"arguments\":{\"applicationOnly\":true,\"excludeDevUi\":true}}}");
+        assertTrue(result.contains("permission-required") || result.contains("\\\"started\\\""), result);
+        call("{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\","
+                + "\"params\":{\"name\":\"quarkus-network-capture_stop\",\"arguments\":{}}}");
     }
 
     private String call(String body) throws Exception {

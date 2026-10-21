@@ -333,7 +333,7 @@ export class QwcNetworkCapture extends QwcHotReloadElement {
         this._error = null;
         this._permission = null;
         this._busy = true;
-        this.jsonRpc.start({ elevate: elevate, applicationOnly: this._applicationOnly, excludeDevUi: this._excludeDevUi }).then(r => {
+        this.jsonRpc.startFromDevUi({ elevate: elevate, applicationOnly: this._applicationOnly, excludeDevUi: this._excludeDevUi }).then(r => {
             this._busy = false;
             const result = r.result;
             if (result.status === 'started') {

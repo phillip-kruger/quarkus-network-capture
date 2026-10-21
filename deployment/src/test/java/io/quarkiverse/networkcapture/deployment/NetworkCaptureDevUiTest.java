@@ -56,7 +56,7 @@ public class NetworkCaptureDevUiTest extends DevUIJsonRPCTest {
         assertFalse(status.get("running").asBoolean());
         assertEquals("", executeJsonRPCMethod("statusLabel").asString());
 
-        JsonNode result = executeJsonRPCMethod("start", Map.of("elevate", false, "applicationOnly", true, "excludeDevUi", true));
+        JsonNode result = executeJsonRPCMethod("startFromDevUi", Map.of("elevate", false, "applicationOnly", true, "excludeDevUi", true));
         String outcome = result.get("status").asString();
         assertTrue(outcome.equals("permission-required") || outcome.equals("started"), result.toString());
         if (outcome.equals("started")) {

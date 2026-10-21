@@ -20,11 +20,13 @@
 
 ### Dev MCP tools (prefix `quarkus-network-capture_`)
 
-- `start(elevate, applicationOnly, excludeDevUi)` → exercise the application → `packets(after, onlyHttp, max)` →
+- `start(applicationOnly, excludeDevUi)` → exercise the application → `packets(after, onlyHttp, max)` →
   `stop()`. Packets carrying HTTP/1.x come with method, URL, status, headers and decoded body, and each response
   links to its request, so a capture answers "what exactly did the application send and receive".
-- `start` with `elevate=true` may make the helper prompt the user for a password; a result of `permission-required`
-  means no privilege and no prompt was possible, and its message says what the user must run once.
+- `start` never runs the privileged helper. A result of `permission-required` means the application lacks the
+  capture privilege: ask the user to press **Start capture** on the Network Capture page of the Dev UI (which can
+  prompt for their password), or to run the one-time command in `setupHint`, then call `status` or `start` again.
+  Do NOT try to obtain the privilege yourself, for instance by running `sudo`.
 - `packets` pages with `after`: pass the last packet number received. It never returns the Dev UI's or Dev MCP's
   own traffic.
 - `status`, `settings` and `listFiles` are read-only. `deleteFile` is disabled until the user enables it.

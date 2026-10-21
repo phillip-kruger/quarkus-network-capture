@@ -67,6 +67,10 @@ responses, and stop.
 2. The tools, under the `quarkus-network-capture_` prefix: `start`, `packets`, `stop`, `status`, `settings` and
    `listFiles` are enabled by default; `deleteFile` has to be enabled on the Dev MCP tab.
 
+The agent's `start` never runs the privileged helper: when the application lacks the capture privilege, the
+agent gets `permission-required` and asks you to start the capture from the Dev UI page, or to run the one-time
+command that removes the prompt. Elevating stays your decision.
+
 The capture never contains the agent's own Dev MCP requests. The extension also ships a skill file
 (`META-INF/quarkus-skill.md`) that the Agent MCP server hands to agents, describing how the extension and the tools
 are used.
