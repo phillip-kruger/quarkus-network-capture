@@ -71,7 +71,12 @@ The agent's `start` never runs the privileged helper: when the application lacks
 agent gets `permission-required` and asks you to start the capture from the Dev UI page, or to run the one-time
 command that removes the prompt. Elevating stays your decision.
 
-The capture never contains the agent's own Dev MCP requests. The extension also ships a skill file
+The capture never contains the agent's own Dev MCP requests. What the `packets` tool returns ends up in the agent's
+conversation, so it replaces credentials with `[redacted]`: the values of headers such as `Authorization` and
+`Cookie` (keeping the authorization scheme and the cookie names), and the values of query parameters such as
+`access_token` or `code` wherever a URL appears, including `Location` and `Referer` headers. See
+`quarkus.network-capture.redact-headers` and `quarkus.network-capture.redact-query-parameters`. Bodies are returned as
+captured. The Dev UI page and the capture files are not redacted. The extension also ships a skill file
 (`META-INF/quarkus-skill.md`) that the Agent MCP server hands to agents, describing how the extension and the tools
 are used.
 
@@ -85,6 +90,8 @@ Everything has a sensible default. The settings you are most likely to touch:
 | `quarkus.network-capture.application-only` | `true` | Keep only your application's traffic. Turn it off to capture everything on the interface. |
 | `quarkus.network-capture.exclude-dev-ui` | `true` | Leave the Dev UI's own traffic out of the file. |
 | `quarkus.network-capture.elevation` | `auto` | How the helper gets its privilege: `sudo`, `pkexec` or `osascript`. |
+| `quarkus.network-capture.redact-headers` | `authorization`, `cookie`, `x-api-key` and similar | Headers whose values the Dev MCP `packets` tool hides from AI agents; `none` turns it off. |
+| `quarkus.network-capture.redact-query-parameters` | `access_token`, `code`, `api_key` and similar | Query parameters whose values the `packets` tool hides; `none` turns it off. |
 
 The two filtering options are also checkboxes on the page when you start a capture. Less common settings are
 `quarkus.network-capture.snap-len`, `quarkus.network-capture.promiscuous` and `quarkus.network-capture.helper-timeout`.

@@ -27,6 +27,10 @@
   capture privilege: ask the user to press **Start capture** on the Network Capture page of the Dev UI (which can
   prompt for their password), or to run the one-time command in `setupHint`, then call `status` or `start` again.
   Do NOT try to obtain the privilege yourself, for instance by running `sudo`.
+- `packets` replaces credentials with `[redacted]`: the values of credential headers (`Authorization`, `Cookie`,
+  `Set-Cookie`, ...), keeping the authorization scheme and the cookie names, and the values of credential query
+  parameters (`access_token`, `code`, `api_key`, ...) in URLs. Do NOT ask the user to turn this off to debug
+  authentication; the scheme, the cookie names and the response status are usually enough.
 - `packets` pages with `after`: pass the last packet number received. It never returns the Dev UI's or Dev MCP's
   own traffic.
 - `status`, `settings` and `listFiles` are read-only. `deleteFile` is disabled until the user enables it.
