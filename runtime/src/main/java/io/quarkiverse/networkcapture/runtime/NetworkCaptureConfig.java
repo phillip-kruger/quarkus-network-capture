@@ -1,6 +1,7 @@
 package io.quarkiverse.networkcapture.runtime;
 
 import java.time.Duration;
+import java.util.List;
 
 import io.quarkus.runtime.annotations.ConfigPhase;
 import io.quarkus.runtime.annotations.ConfigRoot;
@@ -57,4 +58,23 @@ public interface NetworkCaptureConfig {
      */
     @WithDefault("2m")
     Duration helperTimeout();
+
+    /**
+     * HTTP headers whose values the {@code packets} Dev MCP tool replaces with {@code [redacted]}, so that credentials
+     * the application sends or receives do not end up in an AI agent's conversation. Names are case-insensitive. The
+     * scheme of an {@code Authorization} or {@code Proxy-Authorization} value is kept, and so are the names and
+     * attributes of cookies. {@code none} turns header redaction off. The Dev UI page and the capture files are not
+     * affected.
+     */
+    @WithDefault("authorization,proxy-authorization,cookie,set-cookie,x-api-key,x-auth-token")
+    List<String> redactHeaders();
+
+    /**
+     * Query parameters whose values the {@code packets} Dev MCP tool replaces with {@code [redacted]}, wherever a URL
+     * appears: the request line, the packet summary, and headers such as {@code Location} and {@code Referer}. The same
+     * names are redacted in a URL's fragment, where the OAuth implicit flow returns the access token. Names
+     * are case-insensitive. {@code none} turns query parameter redaction off.
+     */
+    @WithDefault("access_token,refresh_token,id_token,token,code,api_key,apikey,key,password,secret,client_secret,signature,sig")
+    List<String> redactQueryParameters();
 }

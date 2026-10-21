@@ -27,9 +27,11 @@ import io.quarkiverse.networkcapture.Packet;
 public class NetworkCaptureJsonRpcService {
 
     private final NetworkCaptureConfig config;
+    private final Redaction redaction;
 
     public NetworkCaptureJsonRpcService(NetworkCaptureConfig config) {
         this.config = config;
+        this.redaction = new Redaction(config.redactHeaders(), config.redactQueryParameters());
     }
 
     @DevMCPEnableByDefault
@@ -121,7 +123,9 @@ public class NetworkCaptureJsonRpcService {
     @JsonRpcDescription("Packets of the running or last capture, oldest first, without the Dev UI's own traffic. Each "
             + "packet has a number, time, addresses, protocol and a one-line summary; packets carrying HTTP/1.x also have "
             + "the method, URL, status, headers and body (decoded, chunking removed) and a link to the matching request or "
-            + "response. Returns at most 'max' packets after packet number 'after'; to page, pass the last number received")
+            + "response. Credential headers such as Authorization and Cookie, and credential query parameters such as "
+            + "access_token, are redacted. Returns at most 'max' packets "
+            + "after packet number 'after'; to page, pass the last number received")
     public Messages.PacketBatch packets(
             @JsonRpcDescription("Return only packets numbered after this one; 0 for the first") long after,
             @JsonRpcDescription("Return only packets that carry HTTP") boolean onlyHttp,
@@ -134,7 +138,7 @@ public class NetworkCaptureJsonRpcService {
             batch = CaptureManager.INSTANCE.rows(cursor, true, MAX_BATCH);
             for (Messages.PacketRow row : batch.packets()) {
                 if (!onlyHttp || row.http() != null) {
-                    packets.add(row);
+                    packets.add(redaction.apply(row));
                     if (packets.size() == limit) {
                         return new Messages.PacketBatch(batch.running(), batch.dropped(), packets);
                     }
